@@ -29,6 +29,11 @@ training:
   validation:
     new_untrained_episodes: 1
 
+recording:
+  fps: 30
+  default_episode_seconds: 30
+  dataset_repo_id: machanize/pencil-to-glass
+
 runtime:
   default_mode: "off"
   modes:
@@ -45,4 +50,3 @@ storage:
   episode_directory: data/episodes
   label_directory: data/labels
   model_directory: models
-
