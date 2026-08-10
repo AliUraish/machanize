@@ -7,9 +7,27 @@ name = "machanize"
 version = "0.1.0"
 description = "A supervisory monitoring SDK for frozen robot policies"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "Proprietary" }
+dependencies = [
+  "PyYAML>=6.0,<7.0",
+]
+
+[project.optional-dependencies]
+lerobot = [
+  "lerobot[dataset,feetech]>=0.6.1,<0.7",
+]
+dev = [
+  "pytest>=8.0,<10.0",
+  "ruff>=0.9,<1.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/machanize"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
