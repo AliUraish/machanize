@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "machanize"
+version = "0.1.0"
+description = "A supervisory monitoring SDK for frozen robot policies"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/machanize"]
+
