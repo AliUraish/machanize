@@ -25,7 +25,20 @@ LeRobot camera + sensors + proposed actions
 
 ## Current status
 
-Phase 1 foundation is defined. No model training or robot-control implementation exists yet.
+Phases 1 and 2 are complete. Machanize can wrap a LeRobot-compatible robot and automatically
+record observations, proposed actions, executed actions, task text, and episode outcomes into a
+local LeRobotDataset. Each completed episode receives a pending-review manifest.
+
+## Local setup
+
+Python 3.12 is required.
+
+```text
+uv sync --extra dev
+uv sync --extra lerobot
+uv run pytest
+```
+
+The second command installs LeRobot dataset support and the Feetech SDK required by SO-101.
 
 See [Architecture](docs/ARCHITECTURE.md), [Development phases](docs/PHASES.md), and the first [task configuration](configs/projects/so101_pencil_to_glass.yaml).
-
