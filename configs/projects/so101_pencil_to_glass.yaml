@@ -1,0 +1,48 @@
+project:
+  name: pencil-to-glass-demo
+  sdk: machanize
+  description: Pick up a pencil and place it inside a glass.
+
+robot:
+  framework: lerobot
+  type: so101
+  camera_names:
+    - front
+
+task:
+  objects:
+    - pencil
+    - glass
+    - gripper
+  success:
+    - pencil_is_inside_glass
+  states:
+    - normal
+    - missed_pencil
+    - pencil_dropped
+    - wrong_direction
+    - stuck
+
+training:
+  sequence_seconds: 2
+  require_human_approval: true
+  validation:
+    new_untrained_episodes: 1
+
+runtime:
+  default_mode: "off"
+  modes:
+    - "off"
+    - monitor
+    - active
+  alert_threshold: 0.60
+  stop_threshold: 0.85
+  consecutive_high_risk_predictions: 3
+  fail_safe_on_inference_error: true
+
+storage:
+  mode: local
+  episode_directory: data/episodes
+  label_directory: data/labels
+  model_directory: models
+
