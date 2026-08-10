@@ -28,6 +28,10 @@ pnpm-debug.log*
 temp/
 tmp/
 *.tmp
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
 
 # IDE / editor files
 .vscode/
@@ -41,3 +45,15 @@ Thumbs.db
 
 # Local / generated files
 phases.md
+
+# Local robot data and trained artifacts
+data/episodes/
+data/labels/
+data/cache/
+models/*.pt
+models/*.onnx
+models/*.safetensors
+
+# Dashboard dependencies and builds
+dashboard/node_modules/
+dashboard/dist/
