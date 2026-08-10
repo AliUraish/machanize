@@ -101,7 +101,7 @@ class LeRobotAdapter:
         elif bus is None:
             try:
                 self.robot.disconnect()
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - cleanup must tolerate device errors
                 cleanup_errors.append(error)
 
         cameras = getattr(self.robot, "cameras", {})
@@ -130,7 +130,7 @@ def _resolve_features(features: Any) -> Mapping[str, Any]:
 def _is_connected(component: Any) -> bool:
     try:
         return bool(component.is_connected)
-    except Exception:
+    except Exception:  # noqa: BLE001 - broken state must still trigger cleanup
         # If connection state itself is broken, attempting cleanup is safer.
         return True
 
@@ -156,9 +156,9 @@ def _disable_torque_and_disconnect_bus(bus: Any) -> list[Exception]:
         except TypeError:
             try:
                 bus.disconnect()
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - best-effort device cleanup
                 cleanup_errors.append(error)
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - best-effort device cleanup
             cleanup_errors.append(error)
     else:
         try:
@@ -166,13 +166,13 @@ def _disable_torque_and_disconnect_bus(bus: Any) -> list[Exception]:
         except TypeError:
             try:
                 bus.disconnect()
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - best-effort device cleanup
                 cleanup_errors.append(error)
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - best-effort device cleanup
             cleanup_errors.append(error)
             try:
                 bus.disconnect(disable_torque=False)
-            except Exception as close_error:
+            except Exception as close_error:  # noqa: BLE001 - preserve all cleanup failures
                 cleanup_errors.append(close_error)
 
     return cleanup_errors
