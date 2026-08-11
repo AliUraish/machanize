@@ -5,18 +5,22 @@ type Props = {
   models: YoloModel[];
   selectedModelId: string;
   job: TrainingJob | null;
+  labelingReady: boolean;
   onModelChange: (modelId: string) => void;
   onPredict: () => Promise<void>;
   onTrain: (epochs: number, device: string | null) => Promise<void>;
+  selectedEpisodeCount: number;
 };
 
 export function TrainingPanel({
   models,
   selectedModelId,
   job,
+  labelingReady,
   onModelChange,
   onPredict,
-  onTrain
+  onTrain,
+  selectedEpisodeCount
 }: Props) {
   const [epochs, setEpochs] = useState(50);
   const [device, setDevice] = useState("mps");
@@ -44,12 +48,17 @@ export function TrainingPanel({
         </select>
       </label>
       <button
-        disabled={busy}
+        disabled={busy || selectedEpisodeCount < 2 || !labelingReady}
         onClick={() => void onTrain(epochs, device || null)}
         type="button"
       >
         {busy ? "Training…" : "Train yolo26n"}
       </button>
+      {selectedEpisodeCount < 2 ? (
+        <small>Select at least two auto-labeled episodes for train/validation.</small>
+      ) : !labelingReady ? (
+        <small>Finish DINO auto-labeling for this selection before training.</small>
+      ) : null}
       {job ? <p className={`job-status ${job.status}`}>Job: {job.status}</p> : null}
       {job?.error ? <p className="error-copy">{job.error}</p> : null}
 
