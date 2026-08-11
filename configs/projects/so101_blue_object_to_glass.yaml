@@ -1,36 +1,50 @@
 project:
-  name: pencil-to-glass-demo
+  name: blue-object-to-glass-demo
   sdk: machanize
-  description: Pick up a pencil and place it inside a glass.
+  description: Pick up a blue object and place it inside a glass.
 
 robot:
   framework: lerobot
   type: so101
   camera_names:
     - front
+    - wrist
+  cameras:
+    front:
+      device: /dev/video0
+      width: 640
+      height: 480
+    wrist:
+      device: /dev/video2
+      width: 640
+      height: 480
 
 task:
   objects:
-    - pencil
+    - blue_object
     - glass
     - gripper
   success:
-    - pencil_is_inside_glass
+    - blue_object_is_inside_glass
   states:
     - normal
-    - missed_pencil
-    - pencil_dropped
+    - missed_blue_object
+    - blue_object_dropped
     - wrong_direction
     - stuck
 
 training:
   sequence_seconds: 2
-  require_human_approval: true
+  require_human_approval: false
   validation:
     new_untrained_episodes: 1
 
 perception:
-  frame_extraction_stride: 5
+  frame_extraction_stride: 1
+  grounding_dino:
+    model: IDEA-Research/grounding-dino-tiny
+    confidence_threshold: 0.50
+    auto_approve: true
   yolo:
     base_model: yolo26n.pt
     image_size: 640
@@ -40,7 +54,7 @@ perception:
 recording:
   fps: 30
   default_episode_seconds: 30
-  dataset_repo_id: machanize/pencil-to-glass
+  dataset_repo_id: machanize/blue-object-to-glass
 
 runtime:
   default_mode: "off"
