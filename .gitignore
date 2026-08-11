@@ -32,6 +32,7 @@ tmp/
 .ruff_cache/
 __pycache__/
 *.py[cod]
+*.tsbuildinfo
 
 # IDE / editor files
 .vscode/
@@ -50,9 +51,12 @@ phases.md
 data/episodes/
 data/labels/
 data/cache/
+data/predictions/
+data/yolo/
 models/*.pt
 models/*.onnx
 models/*.safetensors
+models/yolo/
 
 # Dashboard dependencies and builds
 dashboard/node_modules/
