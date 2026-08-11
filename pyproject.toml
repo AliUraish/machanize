@@ -17,7 +17,15 @@ dependencies = [
 lerobot = [
   "lerobot[dataset,feetech]>=0.6.1,<0.7",
 ]
+vision = [
+  "fastapi>=0.115,<1.0",
+  "pillow>=11.0,<13.0",
+  "python-multipart>=0.0.20,<1.0",
+  "ultralytics>=8.4,<9.0",
+  "uvicorn[standard]>=0.34,<1.0",
+]
 dev = [
+  "httpx>=0.28,<1.0",
   "pytest>=8.0,<10.0",
   "ruff>=0.9,<1.0",
 ]
@@ -30,4 +38,4 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
