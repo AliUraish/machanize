@@ -5,6 +5,9 @@ import type {
   Frame,
   Health,
   LabelingJob,
+  TaskAnalysisJob,
+  TaskTemplate,
+  TaskTemplateDraft,
   SynchronizedFrames,
   TrainingJob,
   YoloModel
@@ -26,6 +29,28 @@ export const api = {
   health: () => request<Health>("/api/health"),
   episodes: () => request<Episode[]>("/api/episodes"),
   models: () => request<YoloModel[]>("/api/models"),
+  startTaskAnalysis: (episodeId: string, confirmUnknownAsSuccess: boolean) =>
+    request<TaskAnalysisJob>("/api/analysis/start", {
+      method: "POST",
+      body: JSON.stringify({
+        episode_id: episodeId,
+        confirm_unknown_as_success: confirmUnknownAsSuccess
+      })
+    }),
+  taskAnalysisJob: (jobId: string) =>
+    request<TaskAnalysisJob>(`/api/analysis/jobs/${jobId}`),
+  taskTemplate: (episodeId: string) =>
+    request<TaskTemplate>(`/api/analysis/templates/${episodeId}`),
+  saveTaskTemplate: (episodeId: string, draft: TaskTemplateDraft) =>
+    request<TaskTemplate>(`/api/analysis/templates/${episodeId}`, {
+      method: "PUT",
+      body: JSON.stringify(draft)
+    }),
+  approveTaskTemplate: (episodeId: string) =>
+    request<TaskTemplate>(`/api/analysis/templates/${episodeId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ confirm: true })
+    }),
   extract: (episodeId: string, cameraKey: string, stride: number) =>
     request<Frame[]>(`/api/episodes/${episodeId}/extract`, {
       method: "POST",
