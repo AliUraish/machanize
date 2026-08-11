@@ -25,7 +25,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--follower-port", required=True)
     parser.add_argument("--leader-port", required=True)
-    parser.add_argument("--camera", default="0")
+    parser.add_argument("--front-camera", default="/dev/video0")
+    parser.add_argument("--wrist-camera", default="/dev/video2")
     parser.add_argument("--duration", type=float, default=30.0)
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--episodes", type=int, default=1)
@@ -38,18 +39,25 @@ def main() -> None:
     args = parse_args()
     session_id = args.session_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     session_root = args.data_root / session_id
-    camera_source: int | str = int(args.camera) if args.camera.isdigit() else args.camera
+    front_camera = _camera_source(args.front_camera)
+    wrist_camera = _camera_source(args.wrist_camera)
     follower = SO101Follower(
         SO101FollowerConfig(
             port=args.follower_port,
             id="machanize_follower",
             cameras={
                 "front": OpenCVCameraConfig(
-                    index_or_path=camera_source,
+                    index_or_path=front_camera,
                     width=640,
                     height=480,
                     fps=args.fps,
-                )
+                ),
+                "wrist": OpenCVCameraConfig(
+                    index_or_path=wrist_camera,
+                    width=640,
+                    height=480,
+                    fps=args.fps,
+                ),
             },
         )
     )
@@ -77,7 +85,17 @@ def main() -> None:
         bridge.connect()
         leader.connect()
         for episode_number in range(1, args.episodes + 1):
-            bridge.start_episode({"control": "teleoperation", "session_id": session_id})
+            bridge.start_episode(
+                {
+                    "control": "teleoperation",
+                    "session_id": session_id,
+                    "camera_devices": {
+                        "front": str(args.front_camera),
+                        "wrist": str(args.wrist_camera),
+                    },
+                    "camera_sync": "same_observation_step",
+                }
+            )
             started_at = time.monotonic()
             try:
                 while time.monotonic() - started_at < args.duration:
@@ -99,6 +117,10 @@ def main() -> None:
         bridge.close()
         if leader.is_connected:
             leader.disconnect()
+
+
+def _camera_source(value: str) -> int | str:
+    return int(value) if value.isdigit() else value
 
 
 if __name__ == "__main__":
