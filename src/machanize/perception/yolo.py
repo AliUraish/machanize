@@ -26,6 +26,8 @@ class YoloExport:
     training_images: int
     validation_images: int
     camera_images: dict[str, int] = field(default_factory=dict)
+    training_boxes: int = 0
+    validation_boxes: int = 0
 
 
 @dataclass(frozen=True)
@@ -47,10 +49,17 @@ class YoloDatasetExporter:
         self.annotation_store = annotation_store
         self.export_root = Path(export_root).resolve()
 
-    def export(self, *, class_names: list[str], export_id: str | None = None) -> YoloExport:
+    def export(
+        self,
+        *,
+        class_names: list[str],
+        export_id: str | None = None,
+        episode_ids: list[str] | None = None,
+    ) -> YoloExport:
         if len(set(class_names)) != len(class_names):
             raise ValueError("YOLO class names must be unique.")
-        annotations = self.annotation_store.approved()
+        selected_episode_ids = set(episode_ids) if episode_ids else None
+        annotations = self.annotation_store.approved(selected_episode_ids)
         if len(annotations) < 2:
             raise ValueError("Approve at least two labeled frames before YOLO training.")
 
@@ -67,21 +76,36 @@ class YoloDatasetExporter:
             )
 
         ordered_groups = sorted(grouped.items())
+        episode_splits: dict[str, str] | None = None
+        if selected_episode_ids is not None:
+            labeled_episodes = sorted({str(item[0][0]) for item in ordered_groups})
+            if len(labeled_episodes) < 2:
+                raise ValueError("Auto-label at least two selected episodes before YOLO training.")
+            validation_episode_count = max(1, round(len(labeled_episodes) * 0.2))
+            validation_episodes = set(labeled_episodes[-validation_episode_count:])
+            episode_splits = {
+                episode_id: "val" if episode_id in validation_episodes else "train"
+                for episode_id in labeled_episodes
+            }
         validation_group_count = max(1, round(len(ordered_groups) * 0.2))
         training_count = 0
         validation_count = 0
+        training_boxes = 0
+        validation_boxes = 0
         camera_images: dict[str, int] = {}
         export_manifest: list[dict[str, Any]] = []
 
-        for group_index, (_, group_annotations) in enumerate(ordered_groups):
-            split = (
+        for group_index, ((episode_id, _), group_annotations) in enumerate(ordered_groups):
+            split = episode_splits.get(episode_id) if episode_splits else (
                 "val" if group_index >= len(ordered_groups) - validation_group_count else "train"
             )
             for annotation in sorted(group_annotations, key=lambda item: item["camera_key"]):
                 if split == "train":
                     training_count += 1
+                    training_boxes += len(annotation["boxes"])
                 else:
                     validation_count += 1
+                    validation_boxes += len(annotation["boxes"])
                 camera_key = str(annotation["camera_key"])
                 camera_images[camera_key] = camera_images.get(camera_key, 0) + 1
                 image_path = Path(annotation["image_path"])
@@ -109,6 +133,8 @@ class YoloDatasetExporter:
                 )
 
         data_yaml = root / "data.yaml"
+        if validation_boxes == 0:
+            raise ValueError("Validation labels contain zero boxes; YOLO training was blocked.")
         data_yaml.write_text(
             yaml.safe_dump(
                 {
@@ -125,6 +151,8 @@ class YoloDatasetExporter:
             json.dumps(
                 {
                     "camera_images": camera_images,
+                    "training_boxes": training_boxes,
+                    "validation_boxes": validation_boxes,
                     "frames": export_manifest,
                 },
                 indent=2,
@@ -139,6 +167,8 @@ class YoloDatasetExporter:
             training_images=training_count,
             validation_images=validation_count,
             camera_images=camera_images,
+            training_boxes=training_boxes,
+            validation_boxes=validation_boxes,
         )
 
 
