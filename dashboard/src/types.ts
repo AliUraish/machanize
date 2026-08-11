@@ -45,6 +45,8 @@ export type Box = {
   width: number;
   height: number;
   confidence?: number | null;
+  suggested?: boolean;
+  accepted?: boolean;
 };
 
 export type Annotation = {
@@ -54,7 +56,7 @@ export type Annotation = {
   image_path?: string;
   boxes: Box[];
   approved: boolean;
-  source: "manual" | "prediction";
+  source: "manual" | "prediction" | "grounding_dino";
   model_id?: string | null;
 };
 
@@ -73,4 +75,20 @@ export type TrainingJob = {
   completed_at?: string | null;
   model?: YoloModel | null;
   error?: string | null;
+};
+
+export type LabelingJob = {
+  job_id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  created_at: string;
+  episode_ids: string[];
+  confidence: number;
+  total_frames: number;
+  processed_frames: number;
+  labeled_frames: number;
+  total_boxes: number;
+  current_episode_id?: string | null;
+  current_camera_key?: string | null;
+  completed_at?: string | null;
+  errors: string[];
 };
