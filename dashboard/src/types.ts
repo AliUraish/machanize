@@ -4,6 +4,68 @@ export type Health = {
   mode: string;
   robot_movement_enabled: false;
   classes: string[];
+  task_analysis_model: string;
+  task_analysis_fps: number;
+  task_template_approval: "manual";
+};
+
+export type TimestampEvidence = {
+  timestamp_seconds: number;
+  description: string;
+};
+
+export type TaskStage = {
+  name: string;
+  description: string;
+  start_time_seconds: number;
+  end_time_seconds: number;
+  expected_object_relationships: string[];
+  expected_robot_behavior: string;
+  expected_gripper_behavior: string;
+  evidence: TimestampEvidence[];
+  confidence: number;
+  uncertainty: string[];
+};
+
+export type PossibleFailure = {
+  failure_type: string;
+  description: string;
+  related_stage_names: string[];
+  detectable_evidence: string[];
+};
+
+export type TaskTemplateDraft = {
+  task_description: string;
+  ordered_task_stages: TaskStage[];
+  success_conditions: string[];
+  possible_failure_types: PossibleFailure[];
+  important_timestamps_and_evidence: TimestampEvidence[];
+  confidence: number;
+  uncertainty: string[];
+};
+
+export type TaskTemplate = TaskTemplateDraft & {
+  source_episode: {
+    episode_id: string;
+    dataset_episode_index: number;
+    project_name: string;
+  };
+  model_version: string;
+  video_fps: number;
+  approval_status: "draft" | "approved";
+  created_at: string;
+  updated_at: string;
+  approved_at?: string | null;
+};
+
+export type TaskAnalysisJob = {
+  job_id: string;
+  episode_id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  created_at: string;
+  completed_at?: string | null;
+  result?: TaskTemplate | null;
+  error?: string | null;
 };
 
 export type Episode = {
