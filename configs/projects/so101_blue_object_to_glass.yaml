@@ -39,6 +39,18 @@ training:
   validation:
     new_untrained_episodes: 1
 
+analysis:
+  source_outcome: success_or_user_confirmed_unknown
+  required_cameras:
+    - front
+    - wrist
+  video_layout: side_by_side
+  video_fps: 5
+  model: gemini-robotics-er-1.6-preview
+  api: generateContent
+  require_human_approval: true
+  auto_approve: false
+
 perception:
   frame_extraction_stride: 1
   grounding_dino:
