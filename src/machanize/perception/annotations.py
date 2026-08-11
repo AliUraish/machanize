@@ -75,11 +75,13 @@ class AnnotationStore:
             return None
         return json.loads(path.read_text(encoding="utf-8"))
 
-    def approved(self) -> list[dict[str, Any]]:
+    def approved(self, episode_ids: set[str] | None = None) -> list[dict[str, Any]]:
         records = []
         for path in sorted(self.root.rglob("*.json")):
             record = json.loads(path.read_text(encoding="utf-8"))
-            if record.get("approved") is True:
+            if record.get("approved") is True and (
+                episode_ids is None or record.get("episode_id") in episode_ids
+            ):
                 records.append(record)
         return records
 
