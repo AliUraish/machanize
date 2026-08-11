@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from machanize.adapters import LeRobotAdapter
+from machanize.analysis.task_template import TaskTemplateDraft, TaskTemplateStore
 from machanize.perception.annotations import AnnotationStore, BoundingBox, PredictionStore
 from machanize.perception.episodes import EpisodeRepository, ExtractedFrame, FrameExtractor
 from machanize.perception.yolo import (
@@ -295,6 +296,92 @@ def test_phase3_api_is_read_only_for_robot(
     assert saved_record["source"] == "grounding_dino"
     assert [box["class_name"] for box in saved_record["boxes"]] == ["blue_object"]
     assert not any("/robot" in path or "/control" in path for path in openapi["paths"])
+
+
+def test_task_template_api_never_approves_without_explicit_confirmation(
+    real_pi_data_root: Path,
+    tmp_path: Path,
+) -> None:
+    repository_root = Path(__file__).parent.parent
+    settings = Phase3Settings(
+        repository_root=repository_root,
+        data_root=real_pi_data_root,
+        frame_cache_root=tmp_path / "cache",
+        labels_root=tmp_path / "labels",
+        predictions_root=tmp_path / "predictions",
+        yolo_exports_root=tmp_path / "exports",
+        models_root=tmp_path / "models",
+        project_config=repository_root / "configs/projects/so101_blue_object_to_glass.yaml",
+    )
+    episode = EpisodeRepository(real_pi_data_root).list()[0]
+    store = TaskTemplateStore(tmp_path / "templates")
+    draft = TaskTemplateDraft.model_validate(
+        {
+            "task_description": episode.task,
+            "ordered_task_stages": [
+                {
+                    "name": "success",
+                    "description": "The object is inside the glass.",
+                    "start_time_seconds": 0.4,
+                    "end_time_seconds": 0.5,
+                    "expected_object_relationships": ["object inside glass"],
+                    "expected_robot_behavior": "Stop moving.",
+                    "expected_gripper_behavior": "Release the object.",
+                    "evidence": [{"timestamp_seconds": 0.5, "description": "Object is in glass."}],
+                    "confidence": 0.9,
+                    "uncertainty": [],
+                }
+            ],
+            "success_conditions": ["Object remains inside glass."],
+            "possible_failure_types": [
+                {
+                    "failure_type": "incorrect placement",
+                    "description": "Object lands outside the glass.",
+                    "related_stage_names": ["success"],
+                    "detectable_evidence": ["Object is not inside glass."],
+                }
+            ],
+            "important_timestamps_and_evidence": [
+                {"timestamp_seconds": 0.5, "description": "Placement completed."}
+            ],
+            "confidence": 0.9,
+            "uncertainty": [],
+        }
+    )
+    store.create_model_draft(
+        episode,
+        draft,
+        model_version="gemini-robotics-er-1.6-preview",
+        video_fps=5,
+    )
+    analysis_service = SimpleNamespace(store=store, analyze=lambda _: None)
+    client = TestClient(create_app(settings, task_analysis=analysis_service))
+
+    expired_job = client.get("/api/analysis/jobs/process-restarted-job")
+    generated = client.get(f"/api/analysis/templates/{episode.episode_id}")
+    edited_payload = generated.json()
+    edited_payload["confidence"] = 0.8
+    saved = client.put(
+        f"/api/analysis/templates/{episode.episode_id}",
+        json=edited_payload,
+    )
+    rejected_approval = client.post(
+        f"/api/analysis/templates/{episode.episode_id}/approve",
+        json={"confirm": False},
+    )
+    approved = client.post(
+        f"/api/analysis/templates/{episode.episode_id}/approve",
+        json={"confirm": True},
+    )
+
+    assert expired_job.status_code == 410
+    assert "API process may have restarted" in expired_job.json()["detail"]
+    assert generated.json()["approval_status"] == "draft"
+    assert saved.json()["approval_status"] == "draft"
+    assert saved.json()["confidence"] == pytest.approx(0.8)
+    assert rejected_approval.status_code == 422
+    assert approved.json()["approval_status"] == "approved"
+    assert approved.json()["approved_at"] is not None
 
 
 def test_bounding_box_rejects_image_boundary_crossing() -> None:
