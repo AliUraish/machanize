@@ -29,6 +29,14 @@ training:
   validation:
     new_untrained_episodes: 1
 
+perception:
+  frame_extraction_stride: 5
+  yolo:
+    base_model: yolo26n.pt
+    image_size: 640
+    epochs: 50
+    confidence_threshold: 0.25
+
 recording:
   fps: 30
   default_episode_seconds: 30
