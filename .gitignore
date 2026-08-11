@@ -53,6 +53,7 @@ data/labels/
 data/cache/
 data/predictions/
 data/yolo/
+data/analysis/
 models/*.pt
 models/*.onnx
 models/*.safetensors
