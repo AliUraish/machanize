@@ -1,4 +1,13 @@
-import type { Annotation, Box, Episode, Frame, Health, TrainingJob, YoloModel } from "./types";
+import type {
+  Annotation,
+  Box,
+  Episode,
+  Frame,
+  Health,
+  SynchronizedFrames,
+  TrainingJob,
+  YoloModel
+} from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -20,6 +29,11 @@ export const api = {
     request<Frame[]>(`/api/episodes/${episodeId}/extract`, {
       method: "POST",
       body: JSON.stringify({ camera_key: cameraKey, stride })
+    }),
+  extractSynchronized: (episodeId: string, cameraKeys: string[], stride: number) =>
+    request<SynchronizedFrames>(`/api/episodes/${episodeId}/extract-synchronized`, {
+      method: "POST",
+      body: JSON.stringify({ camera_keys: cameraKeys, stride })
     }),
   frames: (episodeId: string, cameraKey: string) =>
     request<Frame[]>(
@@ -51,7 +65,13 @@ export const api = {
       }
     ),
   startTraining: (epochs: number, device: string | null) =>
-    request<{ job_id: string; status: string; training_images: number; validation_images: number }>(
+    request<{
+      job_id: string;
+      status: string;
+      training_images: number;
+      validation_images: number;
+      camera_images: Record<string, number>;
+    }>(
       "/api/training/start",
       {
         method: "POST",
