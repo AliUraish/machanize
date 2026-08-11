@@ -4,6 +4,7 @@ import type {
   Episode,
   Frame,
   Health,
+  LabelingJob,
   SynchronizedFrames,
   TrainingJob,
   YoloModel
@@ -43,6 +44,14 @@ export const api = {
     request<Annotation>(
       `/api/episodes/${episodeId}/frames/${frameId}/annotation?camera_key=${encodeURIComponent(cameraKey)}`
     ),
+  autoLabel: (episodeId: string, frame: Frame, confidence: number) =>
+    request<Annotation>(
+      `/api/episodes/${episodeId}/frames/${frame.frame_id}/auto-label`,
+      {
+        method: "POST",
+        body: JSON.stringify({ camera_key: frame.camera_key, confidence })
+      }
+    ),
   saveAnnotation: (
     episodeId: string,
     frame: Frame,
@@ -57,14 +66,27 @@ export const api = {
         method: "PUT",
         body: JSON.stringify({
           camera_key: frame.camera_key,
-          boxes,
+          boxes: boxes.map(({ class_name, x_center, y_center, width, height, confidence }) => ({
+            class_name,
+            x_center,
+            y_center,
+            width,
+            height,
+            confidence
+          })),
           approved,
           source,
           model_id: modelId
         })
       }
     ),
-  startTraining: (epochs: number, device: string | null) =>
+  startBatchLabeling: (episodeIds: string[], confidence: number) =>
+    request<LabelingJob>("/api/labeling/start", {
+      method: "POST",
+      body: JSON.stringify({ episode_ids: episodeIds, confidence })
+    }),
+  labelingJob: (jobId: string) => request<LabelingJob>(`/api/labeling/${jobId}`),
+  startTraining: (epochs: number, device: string | null, episodeIds: string[]) =>
     request<{
       job_id: string;
       status: string;
@@ -75,7 +97,13 @@ export const api = {
       "/api/training/start",
       {
         method: "POST",
-        body: JSON.stringify({ base_model: "yolo26n.pt", epochs, image_size: 640, device })
+        body: JSON.stringify({
+          base_model: "yolo26n.pt",
+          epochs,
+          image_size: 640,
+          device,
+          episode_ids: episodeIds
+        })
       }
     ),
   trainingJob: (jobId: string) => request<TrainingJob>(`/api/training/${jobId}`),
