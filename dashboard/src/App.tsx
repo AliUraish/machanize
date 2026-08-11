@@ -5,6 +5,7 @@ import { BoxReviewList } from "./components/BoxReviewList";
 import { EpisodeSidebar } from "./components/EpisodeSidebar";
 import { FrameAnnotator } from "./components/FrameAnnotator";
 import { StatusHeader } from "./components/StatusHeader";
+import { TaskAnalysisPanel } from "./components/TaskAnalysisPanel";
 import { TrainingPanel } from "./components/TrainingPanel";
 import type {
   Annotation,
@@ -13,6 +14,9 @@ import type {
   Frame,
   Health,
   LabelingJob,
+  TaskAnalysisJob,
+  TaskTemplate,
+  TaskTemplateDraft,
   TrainingJob,
   YoloModel
 } from "./types";
@@ -34,6 +38,9 @@ export default function App() {
   const [labelingJob, setLabelingJob] = useState<LabelingJob | null>(null);
   const [labelingRevision, setLabelingRevision] = useState(0);
   const [job, setJob] = useState<TrainingJob | null>(null);
+  const [analysisJob, setAnalysisJob] = useState<TaskAnalysisJob | null>(null);
+  const [taskTemplate, setTaskTemplate] = useState<TaskTemplate | null>(null);
+  const [taskTemplateText, setTaskTemplateText] = useState("");
   const [message, setMessage] = useState("Ready");
   const [error, setError] = useState("");
   const currentFrame = frames[frameIndex] ?? null;
@@ -41,6 +48,10 @@ export default function App() {
   const labelingReady = labelingJob?.status === "completed"
     && labelingJob.episode_ids.length === selectedEpisodeIds.length
     && selectedEpisodeIds.every((episodeId) => labelingJob.episode_ids.includes(episodeId));
+  const loadTaskTemplate = (record: TaskTemplate) => {
+    setTaskTemplate(record);
+    setTaskTemplateText(JSON.stringify(toTaskTemplateDraft(record), null, 2));
+  };
 
   useEffect(() => {
     void Promise.all([api.health(), api.episodes(), api.models()])
@@ -150,6 +161,48 @@ export default function App() {
     }, 1500);
     return () => window.clearInterval(timer);
   }, [job]);
+
+  useEffect(() => {
+    if (!selectedEpisode) {
+      setTaskTemplate(null);
+      setTaskTemplateText("");
+      return;
+    }
+    let cancelled = false;
+    void api.taskTemplate(selectedEpisode.episode_id)
+      .then((record) => {
+        if (!cancelled) loadTaskTemplate(record);
+      })
+      .catch((reason: Error) => {
+        if (!cancelled && reason.message !== "Task analysis not found.") setError(reason.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEpisode]);
+
+  useEffect(() => {
+    if (!analysisJob || (analysisJob.status !== "queued" && analysisJob.status !== "running")) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void api.taskAnalysisJob(analysisJob.job_id).then((nextJob) => {
+        setAnalysisJob(nextJob);
+        setMessage(`Gemini demonstration analysis: ${nextJob.status}`);
+        if (nextJob.status === "completed" && nextJob.result) {
+          loadTaskTemplate(nextJob.result);
+          setMessage("Gemini analysis ready as a draft. Review, edit, and explicitly approve it.");
+        }
+      }).catch((reason: Error) => {
+        if (reason.message.startsWith("Analysis job is no longer available")) {
+          setAnalysisJob(null);
+          setMessage("Analysis stopped because the API restarted.");
+        }
+        setError(reason.message);
+      });
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [analysisJob]);
 
   const approved = annotation?.approved === true;
   const unresolvedSuggestions = boxes.filter(
@@ -268,6 +321,47 @@ export default function App() {
     }
   };
 
+  const startTaskAnalysis = async () => {
+    if (!selectedEpisode) return;
+    setError("");
+    setMessage("Building synchronized Front + Wrist evidence and sending it to Gemini…");
+    try {
+      setAnalysisJob(await api.startTaskAnalysis(
+        selectedEpisode.episode_id,
+        selectedEpisode.outcome.toLowerCase() === "unknown"
+      ));
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  };
+
+  const saveTaskTemplate = async () => {
+    if (!selectedEpisode) return;
+    setError("");
+    try {
+      const draft = JSON.parse(taskTemplateText) as TaskTemplateDraft;
+      const saved = await api.saveTaskTemplate(selectedEpisode.episode_id, draft);
+      loadTaskTemplate(saved);
+      setMessage("Task template saved as a draft. It is not approved.");
+    } catch (reason) {
+      setError(reason instanceof SyntaxError ? `Invalid JSON: ${reason.message}` : (reason as Error).message);
+    }
+  };
+
+  const approveTaskTemplate = async () => {
+    if (!selectedEpisode) return;
+    setError("");
+    try {
+      const draft = JSON.parse(taskTemplateText) as TaskTemplateDraft;
+      await api.saveTaskTemplate(selectedEpisode.episode_id, draft);
+      const approvedTemplate = await api.approveTaskTemplate(selectedEpisode.episode_id);
+      loadTaskTemplate(approvedTemplate);
+      setMessage("Task template explicitly approved by the user.");
+    } catch (reason) {
+      setError(reason instanceof SyntaxError ? `Invalid JSON: ${reason.message}` : (reason as Error).message);
+    }
+  };
+
   const selectEpisode = (episode: Episode) => {
     setSelectedEpisode(episode);
     setSelectedEpisodeIds((ids) =>
@@ -278,6 +372,9 @@ export default function App() {
     setFrameIndex(0);
     setAnnotation(null);
     setBoxes([]);
+    setAnalysisJob(null);
+    setTaskTemplate(null);
+    setTaskTemplateText("");
   };
 
   const toggleEpisode = (episodeId: string) => {
@@ -375,6 +472,18 @@ export default function App() {
         </section>
 
         <aside className="inspector">
+          <TaskAnalysisPanel
+            episode={selectedEpisode}
+            healthModel={health?.task_analysis_model}
+            job={analysisJob}
+            onApprove={approveTaskTemplate}
+            onSave={saveTaskTemplate}
+            onStart={startTaskAnalysis}
+            onTemplateTextChange={setTaskTemplateText}
+            selectedEpisodeCount={selectedEpisodeIds.length}
+            template={taskTemplate}
+            templateText={taskTemplateText}
+          />
           <BatchLabelPanel
             confidence={autoLabelConfidence}
             job={labelingJob}
@@ -439,4 +548,16 @@ export default function App() {
 
 function cameraLabel(cameraKey: string) {
   return cameraKey.split(".").at(-1) ?? cameraKey;
+}
+
+function toTaskTemplateDraft(record: TaskTemplate): TaskTemplateDraft {
+  return {
+    task_description: record.task_description,
+    ordered_task_stages: record.ordered_task_stages,
+    success_conditions: record.success_conditions,
+    possible_failure_types: record.possible_failure_types,
+    important_timestamps_and_evidence: record.important_timestamps_and_evidence,
+    confidence: record.confidence,
+    uncertainty: record.uncertainty
+  };
 }
