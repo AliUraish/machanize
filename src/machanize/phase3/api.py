@@ -12,6 +12,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from machanize.analysis.task_template import (
+    ANALYSIS_FPS,
+    GEMINI_ROBOTICS_MODEL,
+    EpisodeEvidenceBuilder,
+    GeminiRoboticsAnalyzer,
+    TaskAnalysisJobManager,
+    TaskAnalysisService,
+    TaskTemplateDraft,
+    TaskTemplateStore,
+)
 from machanize.perception.annotations import AnnotationStore, BoundingBox, PredictionStore
 from machanize.perception.episodes import EpisodeRepository, FrameExtractor
 from machanize.perception.grounding_dino import MODEL_ID, GroundingDinoDetector
@@ -31,6 +41,8 @@ class Phase3Settings:
     models_root: Path
     project_config: Path
     robot_movement_enabled: Literal[False] = False
+    analysis_evidence_root: Path | None = None
+    task_templates_root: Path | None = None
 
     @classmethod
     def from_repository(cls, root: str | Path) -> Phase3Settings:
@@ -46,6 +58,8 @@ class Phase3Settings:
             project_config=(
                 repository_root / "configs" / "projects" / "so101_blue_object_to_glass.yaml"
             ),
+            analysis_evidence_root=repository_root / "data" / "cache" / "analysis",
+            task_templates_root=repository_root / "data" / "analysis" / "task_templates",
         )
 
 
@@ -101,6 +115,15 @@ class BatchLabelRequest(BaseModel):
     confidence: float = Field(default=0.50, gt=0, le=1)
 
 
+class StartTaskAnalysisRequest(BaseModel):
+    episode_id: str
+    confirm_unknown_as_success: bool = False
+
+
+class ApproveTaskTemplateRequest(BaseModel):
+    confirm: Literal[True]
+
+
 @dataclass
 class Phase3Services:
     settings: Phase3Settings
@@ -113,11 +136,14 @@ class Phase3Services:
     trainer: YoloTrainer
     jobs: TrainingJobManager
     labeling_jobs: LabelingJobManager
+    task_templates: TaskTemplateStore
+    task_analysis_jobs: TaskAnalysisJobManager
 
 
 def create_services(
     settings: Phase3Settings,
     grounding_dino: GroundingDinoDetector | None = None,
+    task_analysis: TaskAnalysisService | None = None,
 ) -> Phase3Services:
     settings.frame_cache_root.mkdir(parents=True, exist_ok=True)
     settings.labels_root.mkdir(parents=True, exist_ok=True)
@@ -128,6 +154,18 @@ def create_services(
     episodes = EpisodeRepository(settings.data_root)
     frames = FrameExtractor(settings.frame_cache_root)
     detector = grounding_dino or GroundingDinoDetector()
+    task_template_root = settings.task_templates_root or (
+        settings.repository_root / "data" / "analysis" / "task_templates"
+    )
+    analysis_evidence_root = settings.analysis_evidence_root or (
+        settings.repository_root / "data" / "cache" / "analysis"
+    )
+    task_templates = TaskTemplateStore(task_template_root)
+    task_analysis = task_analysis or TaskAnalysisService(
+        EpisodeEvidenceBuilder(analysis_evidence_root),
+        GeminiRoboticsAnalyzer(),
+        task_templates,
+    )
     return Phase3Services(
         settings=settings,
         episodes=episodes,
@@ -139,6 +177,8 @@ def create_services(
         trainer=trainer,
         jobs=TrainingJobManager(trainer),
         labeling_jobs=LabelingJobManager(episodes, frames, annotations, detector),
+        task_templates=task_analysis.store,
+        task_analysis_jobs=TaskAnalysisJobManager(task_analysis),
     )
 
 
@@ -146,11 +186,12 @@ def create_app(
     settings: Phase3Settings | None = None,
     *,
     grounding_dino: GroundingDinoDetector | None = None,
+    task_analysis: TaskAnalysisService | None = None,
 ) -> FastAPI:
     settings = settings or Phase3Settings.from_repository(
         os.environ.get("MACHANIZE_ROOT", Path.cwd())
     )
-    services = create_services(settings, grounding_dino)
+    services = create_services(settings, grounding_dino, task_analysis)
     config = load_project_config(settings.project_config)
     class_names = list(config.raw["task"]["objects"])
 
@@ -172,11 +213,74 @@ def create_app(
             "mode": "training",
             "robot_movement_enabled": settings.robot_movement_enabled,
             "classes": class_names,
+            "task_analysis_model": GEMINI_ROBOTICS_MODEL,
+            "task_analysis_fps": ANALYSIS_FPS,
+            "task_template_approval": "manual",
         }
 
     @app.get("/api/episodes")
     def list_episodes() -> list[dict]:
         return [episode.to_api() for episode in services.episodes.list()]
+
+    @app.post("/api/analysis/start")
+    def start_task_analysis(request: StartTaskAnalysisRequest) -> dict:
+        try:
+            episode = services.episodes.get(request.episode_id)
+            job = services.task_analysis_jobs.submit(
+                episode,
+                confirm_unknown_as_success=request.confirm_unknown_as_success,
+            )
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return services.task_analysis_jobs.to_api(job.job_id)
+
+    @app.get("/api/analysis/jobs/{job_id}")
+    def task_analysis_status(job_id: str) -> dict:
+        try:
+            return services.task_analysis_jobs.to_api(job_id)
+        except KeyError as error:
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    "Analysis job is no longer available. The API process may have restarted; "
+                    "start the analysis again."
+                ),
+            ) from error
+
+    @app.get("/api/analysis/templates/{episode_id}")
+    def get_task_template(episode_id: str) -> dict:
+        try:
+            services.episodes.get(episode_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        record = services.task_templates.get(episode_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Task analysis not found.")
+        return record.model_dump(mode="json")
+
+    @app.put("/api/analysis/templates/{episode_id}")
+    def save_task_template(episode_id: str, draft: TaskTemplateDraft) -> dict:
+        try:
+            services.episodes.get(episode_id)
+            record = services.task_templates.save_user_draft(episode_id, draft)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        return record.model_dump(mode="json")
+
+    @app.post("/api/analysis/templates/{episode_id}/approve")
+    def approve_task_template(
+        episode_id: str,
+        request: ApproveTaskTemplateRequest,
+    ) -> dict:
+        del request  # Literal[True] makes approval an explicit, validated user action.
+        try:
+            services.episodes.get(episode_id)
+            record = services.task_templates.approve(episode_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        return record.model_dump(mode="json")
 
     @app.post("/api/episodes/{episode_id}/extract")
     def extract_frames(episode_id: str, request: ExtractRequest) -> list[dict]:
