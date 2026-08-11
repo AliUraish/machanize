@@ -109,6 +109,19 @@ class FailingCamera:
         self.is_connected = False
 
 
+class WorkingCamera:
+    def __init__(self) -> None:
+        self.is_connected = False
+        self.disconnect_calls = 0
+
+    def connect(self) -> None:
+        self.is_connected = True
+
+    def disconnect(self) -> None:
+        self.disconnect_calls += 1
+        self.is_connected = False
+
+
 class PartiallyConnectingRobot(FakeRobot):
     def __init__(self, *, torque_disable_fails: bool = False) -> None:
         super().__init__()
@@ -131,6 +144,17 @@ class PartiallyConnectingRobot(FakeRobot):
         self.bus.disconnect()
 
 
+class WristCameraFailureRobot(PartiallyConnectingRobot):
+    def __init__(self) -> None:
+        super().__init__()
+        self.cameras = {"front": WorkingCamera(), "wrist": FailingCamera()}
+
+    def connect(self) -> None:
+        self.bus.connect()
+        self.cameras["front"].connect()
+        self.cameras["wrist"].connect()
+
+
 def test_bridge_records_and_registers_episode() -> None:
     robot = FakeRobot()
     sink = FakeSink()
@@ -144,7 +168,7 @@ def test_bridge_records_and_registers_episode() -> None:
         bridge = MachanizeLeRobotBridge(
             LeRobotAdapter(robot),
             recorder,
-            task="Pick up a pencil.",
+            task="Pick up a blue object.",
         )
 
         bridge.connect()
@@ -174,6 +198,21 @@ def test_camera_connect_failure_disables_torque_and_disconnects_bus() -> None:
     assert robot.bus.disable_torque_calls == 1
     assert not robot.bus.torque_enabled
     assert robot.bus.disconnect_calls == [False]
+    assert not robot.bus.is_connected
+
+
+def test_wrist_camera_failure_disconnects_front_camera_and_motor_bus() -> None:
+    robot = WristCameraFailureRobot()
+    adapter = LeRobotAdapter(robot)
+
+    with pytest.raises(RuntimeError, match="camera failed"):
+        adapter.connect()
+
+    front_camera = robot.cameras["front"]
+    assert isinstance(front_camera, WorkingCamera)
+    assert front_camera.disconnect_calls == 1
+    assert not front_camera.is_connected
+    assert robot.bus.disable_torque_calls == 1
     assert not robot.bus.is_connected
 
 
@@ -227,9 +266,10 @@ def test_empty_episode_cannot_be_finished() -> None:
 
 
 def test_project_config_loads_phase2_fields() -> None:
-    config = load_project_config("configs/projects/so101_pencil_to_glass.yaml")
+    config = load_project_config("configs/projects/so101_blue_object_to_glass.yaml")
 
-    assert config.name == "pencil-to-glass-demo"
+    assert config.name == "blue-object-to-glass-demo"
     assert config.robot_type == "so101"
-    assert config.camera_names == ("front",)
+    assert config.camera_names == ("front", "wrist")
+    assert config.camera_devices == {"front": "/dev/video0", "wrist": "/dev/video2"}
     assert config.episode_directory == Path("data/episodes")
