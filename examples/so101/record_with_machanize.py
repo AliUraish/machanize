@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--session-id")
-    parser.add_argument("--data-root", type=Path, default=Path("data/episodes/pencil-to-glass"))
+    parser.add_argument("--data-root", type=Path, default=Path("data/episodes/blue-object-to-glass"))
     return parser.parse_args()
 
 
@@ -65,20 +65,20 @@ def main() -> None:
     adapter = LeRobotAdapter(follower)
     sink = LeRobotDatasetSink.create(
         adapter,
-        repo_id="machanize/pencil-to-glass",
+        repo_id="machanize/blue-object-to-glass",
         root=session_root / "lerobot",
         fps=args.fps,
     )
     recorder = EpisodeRecorder(
         sink,
         manifest_directory=session_root / "manifests",
-        project_name="pencil-to-glass-demo",
+        project_name="blue-object-to-glass-demo",
         robot_type="so101",
     )
     bridge = MachanizeLeRobotBridge(
         adapter,
         recorder,
-        task="Pick up a pencil and place it inside a glass.",
+        task="Pick up a blue object and place it inside a glass.",
     )
 
     try:
