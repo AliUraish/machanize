@@ -19,7 +19,7 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .safety-badge { display: flex; gap: 9px; align-items: center; border: 1px solid #275c49; border-radius: 999px; padding: 8px 12px; color: #83f2c1; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
 .safety-dot { width: 7px; height: 7px; border-radius: 50%; background: #6cf2b7; box-shadow: 0 0 12px #6cf2b7; }
 
-.workspace { min-height: 0; display: grid; grid-template-columns: 250px minmax(620px, 1fr) 300px; }
+.workspace { min-height: 0; display: grid; grid-template-columns: 250px minmax(620px, 1fr) 390px; }
 .episode-sidebar, .inspector { min-height: 0; overflow: auto; background: #0c0f12; }
 .episode-sidebar { border-right: 1px solid #252a2f; }
 .inspector { border-left: 1px solid #252a2f; }
@@ -94,5 +94,18 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .job-status { color: #abb3b1; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; }
 .job-status.completed { color: #72f1b8; }
 .job-status.failed, .error-copy { color: #ff8292; }
+.task-analysis-panel { display: grid; gap: 10px; }
+.task-analysis-panel > button { padding: 10px; color: #07120d; border: 1px solid #72f1b8; border-radius: 5px; background: #72f1b8; font-weight: 700; }
+.task-analysis-panel textarea { min-height: 320px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; line-height: 1.45; }
+.task-analysis-panel small, .analysis-meta { margin: 0; color: #778188; font-size: 10px; line-height: 1.5; }
+.approval-state { border: 1px solid #3b444a; border-radius: 999px; padding: 3px 7px; color: #8f999f; font-size: 9px; }
+.approval-state.draft { color: #ffcf66; border-color: #69592d; }
+.approval-state.approved { color: #72f1b8; border-color: #39765e; }
+.analysis-summary { display: grid; gap: 8px; padding: 10px; border: 1px solid #2d3940; border-radius: 6px; background: #101518; }
+.analysis-summary strong { color: #eef3ef; font-size: 12px; line-height: 1.4; }
+.analysis-summary ol { display: grid; gap: 5px; margin: 0; padding-left: 22px; }
+.analysis-summary li { color: #72f1b8; font-size: 11px; }
+.analysis-summary li span { color: #d9dedb; text-transform: capitalize; }
+.analysis-summary li small { display: block; margin-top: 2px; }
 .status-bar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 14px; border-top: 1px solid #252a2f; color: #768087; background: #0c0f12; font-family: ui-monospace, monospace; font-size: 10px; }
 .status-bar strong { color: #ff8292; font-weight: 500; }
