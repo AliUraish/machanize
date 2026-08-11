@@ -11,6 +11,7 @@ export default function App() {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [models, setModels] = useState<YoloModel[]>([]);
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
+  const [selectedCameraKey, setSelectedCameraKey] = useState("");
   const [frames, setFrames] = useState<Frame[]>([]);
   const [frameIndex, setFrameIndex] = useState(0);
   const [annotation, setAnnotation] = useState<Annotation | null>(null);
@@ -21,7 +22,7 @@ export default function App() {
   const [message, setMessage] = useState("Ready");
   const [error, setError] = useState("");
   const currentFrame = frames[frameIndex] ?? null;
-  const cameraKey = selectedEpisode?.camera_keys[0] ?? "";
+  const cameraKey = selectedCameraKey;
 
   useEffect(() => {
     void Promise.all([api.health(), api.episodes(), api.models()])
@@ -42,7 +43,7 @@ export default function App() {
       .then((nextFrames) => {
         if (!cancelled) {
           setFrames(nextFrames);
-          setFrameIndex(0);
+          setFrameIndex((index) => Math.min(index, Math.max(nextFrames.length - 1, 0)));
         }
       })
       .catch((reason: Error) => {
@@ -108,10 +109,17 @@ export default function App() {
     setError("");
     setMessage("Extracting frames from the LeRobot episode…");
     try {
-      const nextFrames = await api.extract(selectedEpisode.episode_id, cameraKey, 5);
+      const synchronized = await api.extractSynchronized(
+        selectedEpisode.episode_id,
+        selectedEpisode.camera_keys,
+        5
+      );
+      const nextFrames = synchronized.frames[cameraKey] ?? [];
       setFrames(nextFrames);
       setFrameIndex(0);
-      setMessage(`${nextFrames.length} frames ready for review`);
+      setMessage(
+        `${synchronized.synchronized_frame_count} synchronized frame pairs ready for review`
+      );
     } catch (reason) {
       setError((reason as Error).message);
     }
@@ -150,8 +158,11 @@ export default function App() {
     try {
       const started = await api.startTraining(epochs, device);
       setJob(await api.trainingJob(started.job_id));
+      const cameraSummary = Object.entries(started.camera_images)
+        .map(([key, count]) => `${cameraLabel(key)} ${count}`)
+        .join(" · ");
       setMessage(
-        `Training queued with ${started.training_images} train and ${started.validation_images} validation frames`
+        `Training queued: ${started.training_images} train · ${started.validation_images} validation · ${cameraSummary}`
       );
     } catch (reason) {
       setError((reason as Error).message);
@@ -181,13 +192,29 @@ export default function App() {
     setBoxes((currentBoxes) => currentBoxes.filter((_, index) => index !== indexToRemove));
   };
 
+  const selectEpisode = (episode: Episode) => {
+    setSelectedEpisode(episode);
+    setSelectedCameraKey(episode.camera_keys[0] ?? "");
+    setFrames([]);
+    setFrameIndex(0);
+    setAnnotation(null);
+    setBoxes([]);
+  };
+
+  const selectCamera = (camera: string) => {
+    setSelectedCameraKey(camera);
+    setFrames([]);
+    setAnnotation(null);
+    setBoxes([]);
+  };
+
   return (
     <div className="app-shell">
       <StatusHeader health={health} />
       <main className="workspace">
         <EpisodeSidebar
           episodes={episodes}
-          onSelect={setSelectedEpisode}
+          onSelect={selectEpisode}
           selectedId={selectedEpisode?.episode_id}
         />
 
@@ -197,9 +224,27 @@ export default function App() {
               <span className="eyebrow">{selectedEpisode?.project_name ?? "NO EPISODE"}</span>
               <h2>{selectedEpisode?.task || "Select an episode"}</h2>
             </div>
-            <button disabled={!selectedEpisode} onClick={() => void extract()} type="button">
-              Extract frames
-            </button>
+            <div className="camera-controls">
+              <label>
+                Camera stream
+                <select
+                  disabled={!selectedEpisode}
+                  onChange={(event) => selectCamera(event.target.value)}
+                  value={cameraKey}
+                >
+                  {selectedEpisode?.camera_keys.map((key) => (
+                    <option key={key} value={key}>
+                      {cameraLabel(key)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button disabled={!selectedEpisode} onClick={() => void extract()} type="button">
+                {selectedEpisode && selectedEpisode.camera_keys.length > 1
+                  ? "Extract both cameras"
+                  : "Extract camera"}
+              </button>
+            </div>
           </div>
 
           <FrameAnnotator
@@ -289,8 +334,16 @@ export default function App() {
       <footer className="status-bar">
         <span>{message}</span>
         {error ? <strong>{error}</strong> : null}
-        <span>{currentFrame ? `FRAME ${currentFrame.frame_id} · ${currentFrame.timestamp.toFixed(2)}s` : ""}</span>
+        <span>
+          {currentFrame
+            ? `${cameraLabel(currentFrame.camera_key).toUpperCase()} · FRAME ${currentFrame.frame_id} · ${currentFrame.timestamp.toFixed(2)}s`
+            : ""}
+        </span>
       </footer>
     </div>
   );
+}
+
+function cameraLabel(cameraKey: string) {
+  return cameraKey.split(".").at(-1) ?? cameraKey;
 }
