@@ -1,16 +1,28 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
+import { BatchLabelPanel } from "./components/BatchLabelPanel";
+import { BoxReviewList } from "./components/BoxReviewList";
 import { EpisodeSidebar } from "./components/EpisodeSidebar";
 import { FrameAnnotator } from "./components/FrameAnnotator";
 import { StatusHeader } from "./components/StatusHeader";
 import { TrainingPanel } from "./components/TrainingPanel";
-import type { Annotation, Box, Episode, Frame, Health, TrainingJob, YoloModel } from "./types";
+import type {
+  Annotation,
+  Box,
+  Episode,
+  Frame,
+  Health,
+  LabelingJob,
+  TrainingJob,
+  YoloModel
+} from "./types";
 
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [models, setModels] = useState<YoloModel[]>([]);
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
+  const [selectedEpisodeIds, setSelectedEpisodeIds] = useState<string[]>([]);
   const [selectedCameraKey, setSelectedCameraKey] = useState("");
   const [frames, setFrames] = useState<Frame[]>([]);
   const [frameIndex, setFrameIndex] = useState(0);
@@ -18,11 +30,17 @@ export default function App() {
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedModelId, setSelectedModelId] = useState("");
+  const [autoLabelConfidence, setAutoLabelConfidence] = useState(0.5);
+  const [labelingJob, setLabelingJob] = useState<LabelingJob | null>(null);
+  const [labelingRevision, setLabelingRevision] = useState(0);
   const [job, setJob] = useState<TrainingJob | null>(null);
   const [message, setMessage] = useState("Ready");
   const [error, setError] = useState("");
   const currentFrame = frames[frameIndex] ?? null;
   const cameraKey = selectedCameraKey;
+  const labelingReady = labelingJob?.status === "completed"
+    && labelingJob.episode_ids.length === selectedEpisodeIds.length
+    && selectedEpisodeIds.every((episodeId) => labelingJob.episode_ids.includes(episodeId));
 
   useEffect(() => {
     void Promise.all([api.health(), api.episodes(), api.models()])
@@ -77,7 +95,13 @@ export default function App() {
       .then((nextAnnotation) => {
         if (!cancelled) {
           setAnnotation(nextAnnotation);
-          setBoxes(nextAnnotation.boxes);
+          setBoxes(
+            nextAnnotation.boxes.map((box) => ({
+              ...box,
+              suggested: nextAnnotation.source === "grounding_dino",
+              accepted: nextAnnotation.source === "grounding_dino" ? true : undefined
+            }))
+          );
         }
       })
       .catch((reason: Error) => {
@@ -86,7 +110,33 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentFrame, selectedEpisode, selectedModelId]);
+  }, [currentFrame, labelingRevision, selectedEpisode, selectedModelId]);
+
+  useEffect(() => {
+    if (!labelingJob || (labelingJob.status !== "queued" && labelingJob.status !== "running")) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void api.labelingJob(labelingJob.job_id).then((nextJob) => {
+        setLabelingJob(nextJob);
+        setMessage(
+          `DINO: ${nextJob.processed_frames}/${nextJob.total_frames} frames · ${nextJob.total_boxes} boxes`
+        );
+        if (nextJob.status === "completed" || nextJob.status === "failed") {
+          setLabelingRevision((revision) => revision + 1);
+          if (selectedEpisode && cameraKey) {
+            void api.frames(selectedEpisode.episode_id, cameraKey).then(setFrames);
+          }
+          setMessage(
+            nextJob.status === "completed"
+              ? `Auto-labeling complete: ${nextJob.labeled_frames} frames · ${nextJob.total_boxes} boxes`
+              : "Auto-labeling failed"
+          );
+        }
+      }).catch((reason: Error) => setError(reason.message));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [cameraKey, labelingJob, selectedEpisode]);
 
   useEffect(() => {
     if (!job || (job.status !== "queued" && job.status !== "running")) return;
@@ -102,6 +152,9 @@ export default function App() {
   }, [job]);
 
   const approved = annotation?.approved === true;
+  const unresolvedSuggestions = boxes.filter(
+    (box) => box.suggested && box.accepted !== true
+  ).length;
   const progress = frames.length === 0 ? 0 : Math.round(((frameIndex + 1) / frames.length) * 100);
 
   const extract = async () => {
@@ -127,12 +180,17 @@ export default function App() {
 
   const save = async (approve: boolean) => {
     if (!selectedEpisode || !currentFrame) return;
+    if (approve && unresolvedSuggestions > 0) {
+      setError("Accept or delete every suggested box before approving this frame.");
+      return;
+    }
     setError("");
+    const acceptedBoxes = boxes.filter((box) => !box.suggested || box.accepted === true);
     try {
       await api.saveAnnotation(
         selectedEpisode.episode_id,
         currentFrame,
-        boxes,
+        acceptedBoxes,
         approve,
         annotation?.source ?? "manual",
         annotation?.model_id ?? undefined
@@ -141,11 +199,12 @@ export default function App() {
         episode_id: selectedEpisode.episode_id,
         camera_key: currentFrame.camera_key,
         frame_id: currentFrame.frame_id,
-        boxes,
+        boxes: acceptedBoxes,
         approved: approve,
         source: previous?.source ?? "manual",
         model_id: previous?.model_id
       }));
+      setBoxes(acceptedBoxes);
       setMessage(approve ? "Frame approved" : "Draft saved");
       if (approve && frameIndex < frames.length - 1) setFrameIndex((index) => index + 1);
     } catch (reason) {
@@ -156,7 +215,13 @@ export default function App() {
   const startTraining = async (epochs: number, device: string | null) => {
     setError("");
     try {
-      const started = await api.startTraining(epochs, device);
+      if (selectedEpisodeIds.length < 2) {
+        throw new Error("Select at least two auto-labeled episodes before training.");
+      }
+      if (!labelingReady) {
+        throw new Error("Finish automatic DINO labeling for the selected episodes first.");
+      }
+      const started = await api.startTraining(epochs, device, selectedEpisodeIds);
       setJob(await api.trainingJob(started.job_id));
       const cameraSummary = Object.entries(started.camera_images)
         .map(([key, count]) => `${cameraLabel(key)} ${count}`)
@@ -164,6 +229,21 @@ export default function App() {
       setMessage(
         `Training queued: ${started.training_images} train · ${started.validation_images} validation · ${cameraSummary}`
       );
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  };
+
+  const startBatchLabeling = async () => {
+    if (selectedEpisodeIds.length === 0) return;
+    setError("");
+    setMessage(`Queuing ${selectedEpisodeIds.length} episodes for automatic labeling…`);
+    try {
+      const started = await api.startBatchLabeling(
+        selectedEpisodeIds,
+        autoLabelConfidence
+      );
+      setLabelingJob(started);
     } catch (reason) {
       setError((reason as Error).message);
     }
@@ -188,17 +268,28 @@ export default function App() {
     }
   };
 
-  const removeBox = (indexToRemove: number) => {
-    setBoxes((currentBoxes) => currentBoxes.filter((_, index) => index !== indexToRemove));
-  };
-
   const selectEpisode = (episode: Episode) => {
     setSelectedEpisode(episode);
+    setSelectedEpisodeIds((ids) =>
+      ids.includes(episode.episode_id) ? ids : [...ids, episode.episode_id]
+    );
     setSelectedCameraKey(episode.camera_keys[0] ?? "");
     setFrames([]);
     setFrameIndex(0);
     setAnnotation(null);
     setBoxes([]);
+  };
+
+  const toggleEpisode = (episodeId: string) => {
+    setSelectedEpisodeIds((ids) =>
+      ids.includes(episodeId) ? ids.filter((id) => id !== episodeId) : [...ids, episodeId]
+    );
+  };
+
+  const toggleAllEpisodes = () => {
+    setSelectedEpisodeIds((ids) =>
+      ids.length === episodes.length ? [] : episodes.map((episode) => episode.episode_id)
+    );
   };
 
   const selectCamera = (camera: string) => {
@@ -213,9 +304,12 @@ export default function App() {
       <StatusHeader health={health} />
       <main className="workspace">
         <EpisodeSidebar
+          activeId={selectedEpisode?.episode_id}
           episodes={episodes}
-          onSelect={selectEpisode}
-          selectedId={selectedEpisode?.episode_id}
+          onOpen={selectEpisode}
+          onToggle={toggleEpisode}
+          onToggleAll={toggleAllEpisodes}
+          selectedIds={selectedEpisodeIds}
         />
 
         <section className="review-workspace">
@@ -281,8 +375,15 @@ export default function App() {
         </section>
 
         <aside className="inspector">
+          <BatchLabelPanel
+            confidence={autoLabelConfidence}
+            job={labelingJob}
+            onConfidenceChange={setAutoLabelConfidence}
+            onStart={startBatchLabeling}
+            selectedEpisodeCount={selectedEpisodeIds.length}
+          />
           <section>
-            <div className="panel-heading">Frame label</div>
+            <div className="panel-heading">Label review (optional)</div>
             <label>
               Draw class
               <select value={selectedClass} onChange={(event) => setSelectedClass(event.target.value)}>
@@ -291,28 +392,18 @@ export default function App() {
                 ))}
               </select>
             </label>
-            <div className="box-list">
-              {boxes.map((box, index) => (
-                <div className="box-row" key={`${box.class_name}-${index}`}>
-                  <span>{box.class_name}</span>
-                  {box.confidence != null ? <small>{Math.round(box.confidence * 100)}%</small> : null}
-                  <button
-                    aria-label={`Remove ${box.class_name} box`}
-                    onClick={() => removeBox(index)}
-                    type="button"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
+            <BoxReviewList
+              boxes={boxes}
+              classNames={health?.classes ?? []}
+              onChange={setBoxes}
+            />
             <div className="approval-actions">
               <button disabled={!currentFrame} onClick={() => void save(false)} type="button">
                 Save draft
               </button>
               <button
                 className="primary"
-                disabled={!currentFrame}
+                disabled={!currentFrame || unresolvedSuggestions > 0}
                 onClick={() => void save(true)}
                 type="button"
               >
@@ -328,6 +419,8 @@ export default function App() {
             onPredict={runPredictions}
             onTrain={startTraining}
             selectedModelId={selectedModelId}
+            selectedEpisodeCount={selectedEpisodeIds.length}
+            labelingReady={labelingReady}
           />
         </aside>
       </main>
