@@ -25,18 +25,23 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .inspector { border-left: 1px solid #252a2f; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; min-height: 48px; color: #cdd3d0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .episode-sidebar > .panel-heading, .inspector section { padding: 0 16px; }
+.select-all { padding: 3px 7px; color: #9ca6ab; border: 1px solid #343b40; border-radius: 4px; background: transparent; font-size: 10px; }
+.selection-count { margin: -5px 16px 10px; color: #72f1b8; font-family: ui-monospace, monospace; font-size: 10px; }
 .count-pill { border: 1px solid #343b40; border-radius: 999px; padding: 2px 8px; color: #949da3; }
 .episode-list { padding: 0 10px 20px; display: grid; gap: 6px; }
-.episode-card { display: grid; gap: 5px; width: 100%; padding: 13px; color: #aeb6b4; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 8px; }
+.episode-card { display: grid; grid-template-columns: 20px 1fr; gap: 5px; width: 100%; padding: 10px; color: #aeb6b4; background: transparent; border: 1px solid transparent; border-radius: 8px; }
 .episode-card:hover { background: #12171a; }
-.episode-card.selected { background: #151b1e; border-color: #384249; box-shadow: inset 3px 0 #72f1b8; }
+.episode-card.selected { border-color: #2f4d41; }
+.episode-card.active { background: #151b1e; box-shadow: inset 3px 0 #72f1b8; }
+.episode-card input { margin-top: 3px; accent-color: #72f1b8; }
+.episode-open { display: grid; gap: 5px; padding: 0; color: #aeb6b4; text-align: left; border: 0; background: transparent; }
 .episode-card strong { color: #eff3ef; font-size: 13px; }
 .episode-card small, .episode-number { color: #687279; font-size: 10px; font-family: ui-monospace, monospace; }
 .empty-copy { color: #6f797f; font-size: 12px; line-height: 1.6; padding: 8px; }
 
 .review-workspace { min-height: 0; display: grid; grid-template-rows: 74px minmax(0, 1fr) 60px; background: #090b0d; }
 .review-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #1d2226; }
-.review-toolbar button, .training-panel button, .approval-actions button { color: #d9dedb; background: #171c20; border: 1px solid #323a40; border-radius: 6px; padding: 9px 12px; }
+.review-toolbar button, .training-panel button, .batch-label-panel button, .approval-actions button { color: #d9dedb; background: #171c20; border: 1px solid #323a40; border-radius: 6px; padding: 9px 12px; }
 .camera-controls { display: flex; align-items: end; gap: 10px; }
 .camera-controls label { display: grid; gap: 4px; color: #7f898f; font-size: 10px; }
 .camera-controls select { min-width: 120px; padding: 8px; color: #e4e8e5; border: 1px solid #30373d; background: #111519; border-radius: 5px; }
@@ -57,13 +62,35 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .inspector label { display: grid; gap: 7px; margin: 10px 0 16px; color: #8b959b; font-size: 11px; }
 .inspector select, .inspector input { width: 100%; padding: 9px; color: #e4e8e5; border: 1px solid #30373d; background: #111519; border-radius: 5px; }
 .box-list { display: grid; gap: 5px; min-height: 40px; }
-.box-row { display: grid; grid-template-columns: 1fr auto 26px; gap: 8px; align-items: center; padding: 8px 9px; background: #12171a; border-radius: 5px; font-size: 12px; }
-.box-row small { color: #72f1b8; }
-.box-row button { color: #8b959b; border: 0; background: transparent; font-size: 18px; }
+.auto-label-controls { display: grid; gap: 8px; padding: 10px; margin-bottom: 14px; border: 1px solid #2d3940; border-radius: 6px; background: #101518; }
+.auto-label-controls label { margin: 0; }
+.auto-label-controls > button { padding: 9px; color: #07120d; border: 1px solid #72f1b8; border-radius: 5px; background: #72f1b8; font-weight: 700; }
+.auto-label-controls > small { color: #778188; font-size: 10px; }
+.threshold-control { display: grid; grid-template-columns: 1fr 38px; align-items: center; gap: 8px; }
+.threshold-control input { padding: 0; accent-color: #72f1b8; }
+.threshold-control output { color: #72f1b8; font-family: ui-monospace, monospace; }
+.box-review { display: grid; gap: 8px; padding: 9px; background: #12171a; border: 1px solid transparent; border-radius: 5px; font-size: 12px; }
+.box-review.suggested { border-color: #385166; }
+.box-review.accepted { border-color: #39765e; }
+.box-review-heading { display: grid; grid-template-columns: 1fr auto 26px; gap: 8px; align-items: center; }
+.box-review-heading select { padding: 6px; }
+.box-review-heading small { color: #72f1b8; }
+.box-review-heading .delete-box { color: #8b959b; border: 0; background: transparent; font-size: 18px; }
+.coordinate-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.coordinate-grid label { gap: 3px; margin: 0; font-family: ui-monospace, monospace; }
+.coordinate-grid input { min-width: 0; padding: 5px; font-size: 10px; }
+.accept-box { padding: 6px; color: #cbd3d0; border: 1px solid #40505a; border-radius: 4px; background: #182126; }
+.box-review.accepted .accept-box { color: #07120d; border-color: #72f1b8; background: #72f1b8; }
+.manual-label { color: #6f797f; font-size: 10px; }
 .approval-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
 .approval-actions .primary { color: #07120d; background: #72f1b8; border-color: #72f1b8; font-weight: 700; }
 .training-panel { display: grid; }
 .training-panel > button { margin-bottom: 12px; }
+.batch-label-panel { display: grid; gap: 8px; }
+.batch-label-panel label { margin: 0; }
+.batch-label-panel > small, .training-panel > small { color: #778188; font-size: 10px; line-height: 1.5; }
+.labeling-progress { display: grid; gap: 5px; color: #8c969b; font-family: ui-monospace, monospace; font-size: 10px; }
+.labeling-progress progress { width: 100%; accent-color: #72f1b8; }
 .job-status { color: #abb3b1; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; }
 .job-status.completed { color: #72f1b8; }
 .job-status.failed, .error-copy { color: #ff8292; }
