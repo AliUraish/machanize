@@ -70,6 +70,16 @@ recording:
 
 runtime:
   default_mode: "off"
+  live_model: gemini-3.1-flash-live-preview
+  control_fps: 30
+  monitor_sample_fps: 5
+  control_watchdog_seconds: 5
+  front_camera_key: front
+  wrist_camera_key: wrist
+  joint_state_key: observation.state
+  cloud_timeout_seconds: 4
+  recommendation_window_seconds: 4
+  active_enabled: false
   modes:
     - "off"
     - monitor
