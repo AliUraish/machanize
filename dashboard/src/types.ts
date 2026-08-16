@@ -45,6 +45,7 @@ export type TaskTemplateDraft = {
 };
 
 export type TaskTemplate = TaskTemplateDraft & {
+  template_version: number;
   source_episode: {
     episode_id: string;
     dataset_episode_index: number;
@@ -66,6 +67,113 @@ export type TaskAnalysisJob = {
   completed_at?: string | null;
   result?: TaskTemplate | null;
   error?: string | null;
+};
+
+export type RuntimeMode = "off" | "monitor" | "active";
+export type ACTState = "ready" | "running" | "stopped" | "error";
+export type RuntimeConnectionState =
+  | "off"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "disconnected"
+  | "error";
+
+export type RuntimeHealth = {
+  status: string;
+  service_role: "pi_runtime";
+  training_backend_controls_robot: false;
+  model_id: string;
+  api_key_configured: boolean;
+  active_enabled: boolean;
+  default_mode: "off";
+  monitor_sample_fps: number;
+  control_fps: number;
+  cloud_timeout_seconds: number;
+  stop_threshold: number;
+  consecutive_stop_predictions: number;
+  robot_configured: boolean;
+  robot_connected: boolean;
+  control_loop_status: string;
+  act_state: ACTState;
+  reset_auth_configured: boolean;
+  stop_latched: boolean;
+};
+
+export type RuntimeSession = {
+  session_id: string;
+  template_episode_id: string;
+  template_version: number;
+  template_revision: string;
+  model_id: string;
+  mode: RuntimeMode;
+  connection_state: RuntimeConnectionState;
+  created_at: string;
+  started_at?: string | null;
+  stopped_at?: string | null;
+  last_sample_at?: string | null;
+  last_decision_at?: string | null;
+  last_latency_ms?: number | null;
+  stop_latched: boolean;
+  stop_reason?: string | null;
+  thresholds: Record<string, unknown>;
+};
+
+export type RuntimeTelemetry = {
+  sequence: number;
+  timestamp?: string | null;
+  joints: Record<string, number>;
+  proposed_actions: Record<string, number>;
+  executed: boolean;
+  block_reason?: string | null;
+  robot_connected: boolean;
+  control_loop_status: string;
+  act_state: ACTState;
+  control_loop_error?: string | null;
+  current_stage: string;
+  progress: number;
+  risk: number;
+  confidence: number;
+  evidence: Array<{ timestamp: string; description: string }>;
+  decision: "CONTINUE" | "STOP";
+  recommend_stop: boolean;
+  monitor_result: string;
+  stop_latched: boolean;
+  stop_reason?: string | null;
+  provider_connection: RuntimeConnectionState;
+  mode: RuntimeMode;
+  latency_ms?: number | null;
+};
+
+export type RuntimeControlStatus = {
+  act_state: ACTState;
+  robot_connected: boolean;
+  stop_latched: boolean;
+  block_reason?: string | null;
+};
+
+export type RuntimeDecision = {
+  decision_id: string;
+  session_id: string;
+  sample_id: number;
+  sample_timestamp: string;
+  received_at: string;
+  model_id: string;
+  mode: RuntimeMode;
+  report: {
+    current_stage: string;
+    progress: number;
+    correct: boolean;
+    failure_type?: string | null;
+    confidence: number;
+    evidence: Array<{ timestamp: string; description: string }>;
+    recommend_stop: boolean;
+  };
+  latency_ms: number;
+  validation_status: "valid";
+  stop_streak: number;
+  local_result: "continue" | "alert" | "stop_requested";
+  safety_reason?: string | null;
 };
 
 export type Episode = {
