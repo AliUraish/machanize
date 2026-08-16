@@ -107,5 +107,45 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .analysis-summary li { color: #72f1b8; font-size: 11px; }
 .analysis-summary li span { color: #d9dedb; text-transform: capitalize; }
 .analysis-summary li small { display: block; margin-top: 2px; }
+.runtime-panel { display: grid; gap: 10px; }
+.runtime-panel > button { padding: 10px; color: #07120d; border: 1px solid #72f1b8; border-radius: 5px; background: #72f1b8; font-weight: 700; }
+.runtime-panel > button.runtime-stop { color: #ff9daa; border-color: #7c3540; background: #241217; }
+.runtime-video { display: grid; min-height: 120px; place-items: center; overflow: hidden; border: 1px solid #2d3439; border-radius: 6px; background: #07090a; }
+.runtime-video img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; }
+.runtime-video span { padding: 24px; color: #687279; font-size: 10px; text-align: center; }
+.runtime-health-grid { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; padding: 9px; border: 1px solid #2d3439; border-radius: 6px; font-size: 10px; }
+.runtime-health-grid span { color: #778188; }
+.runtime-health-grid strong { color: #dfe5e1; text-align: right; text-transform: capitalize; }
+.connection-state { padding: 3px 7px; border: 1px solid #3b444a; border-radius: 999px; color: #8f999f; font-size: 9px; }
+.connection-state.connected { color: #72f1b8; border-color: #39765e; }
+.connection-state.connecting, .connection-state.reconnecting { color: #ffcf66; border-color: #69592d; }
+.connection-state.disconnected, .connection-state.error { color: #ff8292; border-color: #7c3540; }
+.runtime-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.runtime-modes button { padding: 8px 4px; color: #8f999f; border: 1px solid #343b40; border-radius: 5px; background: #111519; font-size: 10px; font-weight: 700; }
+.runtime-modes button[aria-pressed="true"] { color: #07120d; border-color: #72f1b8; background: #72f1b8; }
+.act-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 9px; border: 1px solid #2d3439; border-radius: 6px; }
+.act-controls > div { display: flex; grid-column: 1 / -1; align-items: center; justify-content: space-between; color: #778188; font-size: 10px; }
+.act-controls button { padding: 8px 4px; border: 1px solid #72f1b8; border-radius: 5px; background: #72f1b8; color: #07120d; font-weight: 700; }
+.act-controls button.runtime-stop { border-color: #7c3540; background: #241217; color: #ff9daa; }
+.act-state { color: #dfe5e1; }
+.act-state.running { color: #72f1b8; }
+.act-state.error { color: #ff8292; }
+.stop-alert, .monitor-alert { padding: 10px; border-radius: 6px; font-size: 11px; font-weight: 700; line-height: 1.4; }
+.stop-alert { color: #ffd4da; border: 1px solid #a94050; background: #33131a; }
+.stop-alert button { display: block; width: 100%; margin-top: 8px; padding: 7px; color: #ffd4da; border: 1px solid #a94050; border-radius: 4px; background: #1d0c10; font-size: 10px; }
+.monitor-alert { color: #ffe8ad; border: 1px solid #806a31; background: #2c2512; }
+.stage-timeline { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.stage-timeline li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; color: #899399; border-left: 2px solid #30383d; background: #101417; font-size: 10px; text-transform: capitalize; }
+.stage-timeline li.current { color: #72f1b8; border-left-color: #72f1b8; background: #112019; }
+.stage-timeline small { color: #687279; }
+.runtime-readout { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; padding: 9px; border: 1px solid #2d3439; border-radius: 6px; font-size: 10px; }
+.runtime-readout span { color: #778188; }
+.runtime-readout strong { color: #e1e6e2; text-align: right; text-transform: capitalize; }
+.runtime-readout .decision-stop { color: #ff8292; }
+.runtime-readout .decision-continue { color: #72f1b8; }
+.runtime-evidence, .decision-history { display: grid; gap: 5px; }
+.runtime-evidence strong, .decision-history strong { color: #9da6a3; font-size: 10px; text-transform: uppercase; }
+.runtime-evidence p, .decision-history p { margin: 0; color: #9da6a3; font-size: 10px; line-height: 1.4; }
+.runtime-evidence time { color: #ffcf66; font-family: ui-monospace, monospace; }
 .status-bar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 14px; border-top: 1px solid #252a2f; color: #768087; background: #0c0f12; font-family: ui-monospace, monospace; font-size: 10px; }
 .status-bar strong { color: #ff8292; font-weight: 500; }
