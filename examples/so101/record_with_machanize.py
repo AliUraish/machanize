@@ -31,7 +31,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--session-id")
-    parser.add_argument("--data-root", type=Path, default=Path("data/episodes/blue-object-to-glass"))
+    parser.add_argument(
+        "--data-root", type=Path, default=Path("data/episodes/blue-object-to-glass")
+    )
     return parser.parse_args()
 
 
