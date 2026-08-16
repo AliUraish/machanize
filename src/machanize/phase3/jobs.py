@@ -195,9 +195,7 @@ class LabelingJobManager:
                 continue
 
             episode_frames = [
-                frame
-                for camera_frames in frames_by_camera.values()
-                for frame in camera_frames
+                frame for camera_frames in frames_by_camera.values() for frame in camera_frames
             ]
             with self._lock:
                 self._jobs[job_id].total_frames += len(episode_frames)
