@@ -3,6 +3,7 @@
 from machanize.analysis.task_template import (
     GEMINI_ROBOTICS_MODEL,
     TaskAnalysisJobManager,
+    TaskAnalysisProvider,
     TaskAnalysisService,
     TaskTemplateRecord,
     TaskTemplateStore,
@@ -11,6 +12,7 @@ from machanize.analysis.task_template import (
 __all__ = [
     "GEMINI_ROBOTICS_MODEL",
     "TaskAnalysisJobManager",
+    "TaskAnalysisProvider",
     "TaskAnalysisService",
     "TaskTemplateRecord",
     "TaskTemplateStore",
