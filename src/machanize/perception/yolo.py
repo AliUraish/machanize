@@ -96,8 +96,14 @@ class YoloDatasetExporter:
         export_manifest: list[dict[str, Any]] = []
 
         for group_index, ((episode_id, _), group_annotations) in enumerate(ordered_groups):
-            split = episode_splits.get(episode_id) if episode_splits else (
-                "val" if group_index >= len(ordered_groups) - validation_group_count else "train"
+            split = (
+                episode_splits.get(episode_id)
+                if episode_splits
+                else (
+                    "val"
+                    if group_index >= len(ordered_groups) - validation_group_count
+                    else "train"
+                )
             )
             for annotation in sorted(group_annotations, key=lambda item: item["camera_key"]):
                 if split == "train":
