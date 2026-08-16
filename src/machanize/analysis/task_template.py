@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 from uuid import uuid4
 
 import numpy as np
@@ -76,6 +76,7 @@ class SourceEpisode(BaseModel):
 
 
 class TaskTemplateRecord(TaskTemplateDraft):
+    template_version: int = Field(default=1, ge=1)
     source_episode: SourceEpisode
     model_version: str
     video_fps: float
@@ -91,6 +92,18 @@ class EpisodeEvidence:
     telemetry_path: Path
     telemetry: list[dict[str, Any]]
     fps: float
+
+
+class TaskAnalysisProvider(Protocol):
+    """Replaceable provider boundary for demonstration analysis."""
+
+    model: str
+
+    def analyze(
+        self,
+        episode: EpisodeRecord,
+        evidence: EpisodeEvidence,
+    ) -> TaskTemplateDraft: ...
 
 
 class EpisodeEvidenceBuilder:
@@ -264,6 +277,18 @@ class TaskTemplateStore:
             return None
         return TaskTemplateRecord.model_validate_json(path.read_text(encoding="utf-8"))
 
+    def list_records(self, *, approved_only: bool = False) -> list[TaskTemplateRecord]:
+        if not self.root.is_dir():
+            return []
+        records = [
+            TaskTemplateRecord.model_validate_json(path.read_text(encoding="utf-8"))
+            for path in sorted(self.root.glob("*.json"))
+            if path.name != "approval-history.json"
+        ]
+        if approved_only:
+            records = [record for record in records if record.approval_status == "approved"]
+        return records
+
     def create_model_draft(
         self,
         episode: EpisodeRecord,
@@ -275,6 +300,7 @@ class TaskTemplateStore:
         now = _now()
         record = TaskTemplateRecord(
             **draft.model_dump(),
+            template_version=1,
             source_episode=SourceEpisode(
                 episode_id=episode.episode_id,
                 dataset_episode_index=episode.dataset_episode_index,
@@ -287,12 +313,14 @@ class TaskTemplateStore:
             updated_at=now,
         )
         self._write(record)
+        self._append_history(record, "model_draft_created")
         return record
 
     def save_user_draft(self, episode_id: str, draft: TaskTemplateDraft) -> TaskTemplateRecord:
         existing = self._required(episode_id)
         record = TaskTemplateRecord(
             **draft.model_dump(),
+            template_version=existing.template_version + 1,
             source_episode=existing.source_episode,
             model_version=existing.model_version,
             video_fps=existing.video_fps,
@@ -302,6 +330,7 @@ class TaskTemplateStore:
             approved_at=None,
         )
         self._write(record)
+        self._append_history(record, "user_draft_saved")
         return record
 
     def approve(self, episode_id: str) -> TaskTemplateRecord:
@@ -311,6 +340,7 @@ class TaskTemplateStore:
             update={"approval_status": "approved", "updated_at": now, "approved_at": now}
         )
         self._write(record)
+        self._append_history(record, "user_approved")
         return record
 
     def _required(self, episode_id: str) -> TaskTemplateRecord:
@@ -328,12 +358,29 @@ class TaskTemplateStore:
     def _path(self, episode_id: str) -> Path:
         return self.root / f"{_safe_part(episode_id)}.json"
 
+    def _append_history(self, record: TaskTemplateRecord, event: str) -> None:
+        import hashlib
+
+        self.root.mkdir(parents=True, exist_ok=True)
+        content = record.model_dump_json()
+        history = {
+            "event_id": str(uuid4()),
+            "event": event,
+            "episode_id": record.source_episode.episode_id,
+            "approval_status": record.approval_status,
+            "model_version": record.model_version,
+            "timestamp": record.updated_at,
+            "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+        }
+        with (self.root / "approval-history.jsonl").open("a", encoding="utf-8") as output:
+            output.write(json.dumps(history, sort_keys=True) + "\n")
+
 
 class TaskAnalysisService:
     def __init__(
         self,
         evidence_builder: EpisodeEvidenceBuilder,
-        analyzer: GeminiRoboticsAnalyzer,
+        analyzer: TaskAnalysisProvider,
         store: TaskTemplateStore,
     ) -> None:
         self.evidence_builder = evidence_builder
