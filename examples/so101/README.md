@@ -26,3 +26,10 @@ Each run creates a timestamped local session inside `data/episodes/blue-object-t
 and sensor data uses LeRobot's MP4/Parquet format. Machanize manifests are written beside it.
 The front and wrist frames are captured during the same observation loop and stored with the same
 LeRobot frame index and timestamp so Phase 3 can review them as a synchronized pair.
+
+## Raspberry Pi ACT runtime
+
+`pi_runtime_factory.py` constructs the SO-101 follower, both OpenCV cameras, and the local ACT
+action source for the port-8001 runtime service. It is imported only on the Pi when
+`MACHANIZE_RUNTIME_FACTORY` names it. See [the runtime guide](../../docs/RUNTIME.md) for all required
+environment variables, the Mac dashboard command, and safety prerequisites.
