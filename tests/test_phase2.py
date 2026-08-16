@@ -74,6 +74,21 @@ class FakeSink:
         self.finalized = True
 
 
+class FakeRuntimeHook:
+    def __init__(self, *, block: bool = False) -> None:
+        self.block = block
+        self.before_calls: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        self.after_calls: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
+
+    def before_action(self, observation, proposed_action) -> None:
+        self.before_calls.append((observation, proposed_action))
+        if self.block:
+            raise RuntimeError("safe stop latched")
+
+    def after_action(self, observation, proposed_action, executed_action) -> None:
+        self.after_calls.append((observation, proposed_action, executed_action))
+
+
 class FakeMotorBus:
     def __init__(self, *, torque_disable_fails: bool = False) -> None:
         self.is_connected = False
@@ -186,6 +201,57 @@ def test_bridge_records_and_registers_episode() -> None:
         assert robot.sent_actions == [{"shoulder.pos": 2.0}]
         assert not robot.is_connected
         assert sink.finalized
+
+
+def test_runtime_hook_observes_policy_action_without_changing_it() -> None:
+    robot = FakeRobot()
+    sink = FakeSink()
+    hook = FakeRuntimeHook()
+    with TemporaryDirectory() as directory:
+        bridge = MachanizeLeRobotBridge(
+            LeRobotAdapter(robot),
+            EpisodeRecorder(
+                sink,
+                manifest_directory=directory,
+                project_name="demo",
+                robot_type="so101",
+            ),
+            task="Pick up a blue object.",
+            runtime_hook=hook,
+        )
+        bridge.connect()
+        bridge.start_episode()
+        result = bridge.step({"shoulder.pos": 2.0})
+
+    assert result.executed_action == {"shoulder.pos": 2.0}
+    assert hook.before_calls[0][1] == {"shoulder.pos": 2.0}
+    assert hook.after_calls[0][2] == {"shoulder.pos": 2.0}
+    assert robot.sent_actions == [{"shoulder.pos": 2.0}]
+
+
+def test_runtime_stop_latch_blocks_before_motor_command() -> None:
+    robot = FakeRobot()
+    sink = FakeSink()
+    with TemporaryDirectory() as directory:
+        bridge = MachanizeLeRobotBridge(
+            LeRobotAdapter(robot),
+            EpisodeRecorder(
+                sink,
+                manifest_directory=directory,
+                project_name="demo",
+                robot_type="so101",
+            ),
+            task="Pick up a blue object.",
+            runtime_hook=FakeRuntimeHook(block=True),
+        )
+        bridge.connect()
+        bridge.start_episode()
+
+        with pytest.raises(RuntimeError, match="safe stop latched"):
+            bridge.step({"shoulder.pos": 2.0})
+
+    assert robot.sent_actions == []
+    assert sink.frames == []
 
 
 def test_camera_connect_failure_disables_torque_and_disconnects_bus() -> None:
