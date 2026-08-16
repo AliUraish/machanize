@@ -6,7 +6,9 @@ import { EpisodeSidebar } from "./components/EpisodeSidebar";
 import { FrameAnnotator } from "./components/FrameAnnotator";
 import { StatusHeader } from "./components/StatusHeader";
 import { TaskAnalysisPanel } from "./components/TaskAnalysisPanel";
+import { RuntimePanel } from "./components/RuntimePanel";
 import { TrainingPanel } from "./components/TrainingPanel";
+import { runtimeApi } from "./runtimeApi";
 import type {
   Annotation,
   Box,
@@ -14,6 +16,11 @@ import type {
   Frame,
   Health,
   LabelingJob,
+  RuntimeDecision,
+  RuntimeHealth,
+  RuntimeMode,
+  RuntimeSession,
+  RuntimeTelemetry,
   TaskAnalysisJob,
   TaskTemplate,
   TaskTemplateDraft,
@@ -41,6 +48,13 @@ export default function App() {
   const [analysisJob, setAnalysisJob] = useState<TaskAnalysisJob | null>(null);
   const [taskTemplate, setTaskTemplate] = useState<TaskTemplate | null>(null);
   const [taskTemplateText, setTaskTemplateText] = useState("");
+  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth | null>(null);
+  const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(null);
+  const [runtimeTemplate, setRuntimeTemplate] = useState<TaskTemplate | null>(null);
+  const [runtimeDecisions, setRuntimeDecisions] = useState<RuntimeDecision[]>([]);
+  const [runtimeTelemetry, setRuntimeTelemetry] = useState<RuntimeTelemetry | null>(null);
+  const [runtimeSocketState, setRuntimeSocketState] = useState("disconnected");
+  const [runtimeError, setRuntimeError] = useState("");
   const [message, setMessage] = useState("Ready");
   const [error, setError] = useState("");
   const currentFrame = frames[frameIndex] ?? null;
@@ -62,6 +76,17 @@ export default function App() {
         setSelectedClass(nextHealth.classes[0] ?? "");
       })
       .catch((reason: Error) => setError(reason.message));
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => {
+      void runtimeApi.health()
+        .then(setRuntimeHealth)
+        .catch(() => setRuntimeHealth(null));
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 2000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -203,6 +228,53 @@ export default function App() {
     }, 1500);
     return () => window.clearInterval(timer);
   }, [analysisJob]);
+
+  useEffect(() => {
+    if (!runtimeSession || runtimeSession.stopped_at) return;
+    const timer = window.setInterval(() => {
+      void Promise.all([
+        runtimeApi.session(runtimeSession.session_id),
+        runtimeApi.decisions(runtimeSession.session_id)
+      ]).then(([nextSession, nextDecisions]) => {
+        setRuntimeSession(nextSession);
+        setRuntimeDecisions(nextDecisions);
+      }).catch((reason: Error) => setRuntimeError(reason.message));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [runtimeSession]);
+
+  useEffect(() => {
+    if (!runtimeSession || runtimeSession.stopped_at) {
+      setRuntimeSocketState("disconnected");
+      return;
+    }
+    let disposed = false;
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    const connect = () => {
+      setRuntimeSocketState("connecting");
+      socket = new WebSocket(runtimeApi.runtimeWebSocketUrl());
+      socket.onopen = () => setRuntimeSocketState("connected");
+      socket.onmessage = (event) => {
+        try {
+          setRuntimeTelemetry(JSON.parse(event.data as string) as RuntimeTelemetry);
+        } catch {
+          setRuntimeError("The Pi runtime sent malformed WebSocket telemetry.");
+        }
+      };
+      socket.onerror = () => setRuntimeSocketState("error");
+      socket.onclose = () => {
+        setRuntimeSocketState("disconnected");
+        if (!disposed) reconnectTimer = window.setTimeout(connect, 1000);
+      };
+    };
+    connect();
+    return () => {
+      disposed = true;
+      if (reconnectTimer != null) window.clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, [runtimeSession?.session_id, runtimeSession?.stopped_at]);
 
   const approved = annotation?.approved === true;
   const unresolvedSuggestions = boxes.filter(
@@ -362,6 +434,110 @@ export default function App() {
     }
   };
 
+  const startRuntimeSession = async () => {
+    if (!taskTemplate || taskTemplate.approval_status !== "approved") return;
+    setRuntimeError("");
+    try {
+      const session = await runtimeApi.createSession(taskTemplate);
+      setRuntimeSession(session);
+      setRuntimeTemplate(taskTemplate);
+      setRuntimeDecisions([]);
+      setMessage("Runtime session created in OFF mode. Select MONITOR to connect to Gemini Live.");
+    } catch (reason) {
+      setRuntimeError((reason as Error).message);
+    }
+  };
+
+  const changeRuntimeMode = async (mode: RuntimeMode) => {
+    if (!runtimeSession) return;
+    const confirmActive = mode === "active"
+      ? window.confirm(
+          "Enable ACTIVE mode? Repeated high-confidence recommendations or cloud failure may request a safe stop."
+        )
+      : false;
+    if (mode === "active" && !confirmActive) return;
+    setRuntimeError("");
+    try {
+      const session = await runtimeApi.setMode(runtimeSession.session_id, mode, confirmActive);
+      setRuntimeSession(session);
+      setMessage(`Runtime mode: ${mode.toUpperCase()}`);
+    } catch (reason) {
+      setRuntimeError((reason as Error).message);
+    }
+  };
+
+  const stopRuntimeSession = async () => {
+    if (!runtimeSession) return;
+    setRuntimeError("");
+    try {
+      setRuntimeSession(await runtimeApi.stop(runtimeSession.session_id));
+      setMessage("Live monitoring session stopped.");
+    } catch (reason) {
+      setRuntimeError((reason as Error).message);
+    }
+  };
+
+  const startAct = async () => {
+    setRuntimeError("");
+    try {
+      const status = await runtimeApi.startAct();
+      setRuntimeHealth((previous) => previous ? {
+        ...previous,
+        act_state: status.act_state,
+        robot_connected: status.robot_connected,
+        stop_latched: status.stop_latched
+      } : previous);
+      setRuntimeTelemetry((previous) => previous ? {
+        ...previous,
+        act_state: status.act_state,
+        robot_connected: status.robot_connected,
+        stop_latched: status.stop_latched,
+        block_reason: status.block_reason
+      } : previous);
+      setMessage("ACT started after explicit user confirmation.");
+    } catch (reason) {
+      setRuntimeError((reason as Error).message);
+    }
+  };
+
+  const stopAct = async () => {
+    setRuntimeError("");
+    try {
+      const status = await runtimeApi.stopAct();
+      setRuntimeHealth((previous) => previous ? {
+        ...previous,
+        act_state: status.act_state,
+        robot_connected: status.robot_connected,
+        stop_latched: status.stop_latched
+      } : previous);
+      setRuntimeTelemetry((previous) => previous ? {
+        ...previous,
+        act_state: status.act_state,
+        robot_connected: status.robot_connected,
+        stop_latched: status.stop_latched,
+        block_reason: status.block_reason
+      } : previous);
+      setMessage("ACT stopped. Camera preview remains available.");
+    } catch (reason) {
+      setRuntimeError((reason as Error).message);
+    }
+  };
+
+  const resetRuntimeStop = async () => {
+    const token = window.prompt("Enter the local Pi stop-reset credential.");
+    if (!token) return;
+    setRuntimeError("");
+    try {
+      await runtimeApi.resetStopLatch(token);
+      if (runtimeSession) {
+        setRuntimeSession(await runtimeApi.session(runtimeSession.session_id));
+      }
+      setMessage("The local operator cleared the Pi stop latch.");
+    } catch (reason) {
+      setRuntimeError((reason as Error).message);
+    }
+  };
+
   const selectEpisode = (episode: Episode) => {
     setSelectedEpisode(episode);
     setSelectedEpisodeIds((ids) =>
@@ -472,6 +648,22 @@ export default function App() {
         </section>
 
         <aside className="inspector">
+          <RuntimePanel
+            decisions={runtimeDecisions}
+            error={runtimeError}
+            health={runtimeHealth}
+            onModeChange={changeRuntimeMode}
+            onReset={resetRuntimeStop}
+            onStartAct={startAct}
+            onStart={startRuntimeSession}
+            onStopAct={stopAct}
+            onStop={stopRuntimeSession}
+            session={runtimeSession}
+            socketState={runtimeSocketState}
+            streamUrl={runtimeApi.combinedStreamUrl()}
+            template={runtimeTemplate ?? taskTemplate}
+            telemetry={runtimeTelemetry}
+          />
           <TaskAnalysisPanel
             episode={selectedEpisode}
             healthModel={health?.task_analysis_model}
