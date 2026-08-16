@@ -59,10 +59,10 @@ SDK evaluates recent observations and the action
 4. Split data by episode into training, validation, and test sets.
 5. Train YOLO and measure detection quality on unseen episodes.
 
-Example classes for a pencil-to-glass task:
+Example classes for a blue-object-to-glass task:
 
 ```text
-pencil
+blue_object
 glass
 gripper
 ```
@@ -82,8 +82,8 @@ Group features into short sequences, initially 1–3 seconds, and label each seq
 
 ```text
 normal
-missed_pencil
-pencil_dropped
+missed_blue_object
+blue_object_dropped
 wrong_direction
 stuck
 ```
@@ -94,6 +94,20 @@ Train the GRU to output:
 - Failure probability
 
 The dataset must contain normal behavior, failures, and the moments immediately before failures.
+
+## Demonstration Analysis
+
+Before downstream task-specific training, select one successful LeRobot episode with synchronized
+Front and Wrist video. Sample it at approximately 5 FPS, render the views side by side, and include
+timestamps, joint observations, recorded actions, proposed actions when available, and the task
+description.
+
+Send this evidence to `gemini-robotics-er-1.6-preview` with the official Google GenAI SDK and the
+normal `generateContent` API. The model produces a structured task-template draft containing stages,
+expected relationships and behavior, success conditions, possible failures, evidence, confidence,
+and uncertainty. The GUI must allow editing and require explicit user approval; generated or edited
+templates are never approved automatically. This analyzes the demonstration and does not train or
+modify Gemini's weights.
 
 ## Runtime Decision Logic
 
