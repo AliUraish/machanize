@@ -54,6 +54,7 @@ data/cache/
 data/predictions/
 data/yolo/
 data/analysis/
+data/runtime/
 models/*.pt
 models/*.onnx
 models/*.safetensors
@@ -62,3 +63,5 @@ models/yolo/
 # Dashboard dependencies and builds
 dashboard/node_modules/
 dashboard/dist/
+dashboard/playwright-report/
+dashboard/test-results/
